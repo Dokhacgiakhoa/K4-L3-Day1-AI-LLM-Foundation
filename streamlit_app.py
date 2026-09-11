@@ -132,35 +132,64 @@ st.caption("Giao diện thử nhanh các hàm trong template.py. Tự thêm API 
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
+# Danh mục nhà cung cấp cố định — mỗi loại chỉ cần 1 ô nhập key; base URL và
+# model đã đặt sẵn (đều là endpoint TƯƠNG THÍCH OpenAI nên dùng chung 1 SDK).
+PROVIDER_CATALOG = [
+    {"name": "Gemini", "title": "Google Gemini API Key (Miễn phí — Khuyên dùng)",
+     "base": GEMINI_BASE, "model": "gemini-3.5-flash", "free": True,
+     "link": "https://aistudio.google.com/apikey", "link_text": "Lấy key miễn phí",
+     "placeholder": "AIza..."},
+    {"name": "OpenAI", "title": "OpenAI API Key (GPT-4o / GPT-4o-mini)",
+     "base": "https://api.openai.com/v1", "model": "gpt-4o-mini", "free": False,
+     "link": "https://platform.openai.com/api-keys", "link_text": "Lấy key OpenAI",
+     "placeholder": "sk-proj-..."},
+    {"name": "Claude", "title": "Anthropic Claude API Key",
+     "base": "https://api.anthropic.com/v1/", "model": "claude-3-5-sonnet-20241022",
+     "free": False, "link": "https://console.anthropic.com/settings/keys",
+     "link_text": "Lấy key Claude", "placeholder": "sk-ant-..."},
+    {"name": "DeepSeek", "title": "DeepSeek API Key (DeepSeek-V3 / R1)",
+     "base": "https://api.deepseek.com", "model": "deepseek-chat", "free": False,
+     "link": "https://platform.deepseek.com/api_keys", "link_text": "Lấy key DeepSeek",
+     "placeholder": "sk-..."},
+    {"name": "Groq", "title": "Groq API Key (Dự phòng tốc độ cao)",
+     "base": "https://api.groq.com/openai/v1", "model": "llama-3.3-70b-versatile",
+     "free": True, "link": "https://console.groq.com/keys", "link_text": "Lấy key Groq",
+     "placeholder": "gsk_..."},
+    {"name": "Cerebras", "title": "Cerebras API Key (Dự phòng tốc độ cao)",
+     "base": "https://api.cerebras.ai/v1", "model": "llama-3.3-70b", "free": True,
+     "link": "https://cloud.cerebras.ai", "link_text": "Lấy key Cerebras",
+     "placeholder": "csk-..."},
+]
 
-def seed_providers():
-    """Khởi tạo danh sách provider MỘT LẦN cho phiên.
 
-    Mặc định có 2 provider Gemini (model lớn + nhỏ); key được nạp SẴN từ
-    Secrets/.env (biến OPENAI_API_KEY) — KHÔNG hardcode trong source. Provider
-    thứ 3, 4, 5... là tùy chọn, người dùng tự thêm ở menu '🔑 API Keys'.
-    """
-    if "providers" in st.session_state:
+def seed_keys():
+    """Khởi tạo kho key MỘT LẦN. Gemini được nạp sẵn key từ Secrets/.env nếu có
+    (KHÔNG hardcode); các loại khác để trống cho người dùng tự dán."""
+    if "provider_keys" in st.session_state:
         return
     gkey = os.getenv("OPENAI_API_KEY", "")
     if gkey == "sk-your-key-here":
         gkey = ""
-    gbase = os.getenv("OPENAI_BASE_URL", GEMINI_BASE)
-    st.session_state.providers = [
-        {"label": "Gemini (lớn)", "key": gkey, "base": gbase,
-         "model": os.getenv("LAB_MODEL", "gemini-3.5-flash"), "on": True},
-        {"label": "Gemini (nhỏ)", "key": gkey, "base": gbase,
-         "model": os.getenv("LAB_MINI_MODEL", "gemini-3.5-flash-lite"), "on": True},
-    ]
+    # Chỉ tự điền cho Gemini khi endpoint env đúng là Gemini (hoặc chưa đặt).
+    base = os.getenv("OPENAI_BASE_URL", GEMINI_BASE)
+    st.session_state.provider_keys = {}
+    if gkey and "generativelanguage" in base:
+        st.session_state.provider_keys["Gemini"] = gkey
 
 
 def enabled_providers():
-    """Các provider đang bật + có đủ key và model — dùng cho mọi tính năng."""
-    return [p for p in st.session_state.providers
-            if p.get("on") and p.get("key") and p.get("model")]
+    """Trả về provider đã có key (label/key/base/model) — dùng cho mọi tính năng."""
+    keys = st.session_state.get("provider_keys", {})
+    out = []
+    for c in PROVIDER_CATALOG:
+        k = (keys.get(c["name"]) or "").strip()
+        if k:
+            out.append({"label": c["name"], "key": k,
+                        "base": c["base"], "model": c["model"]})
+    return out
 
 
-seed_providers()
+seed_keys()
 has_key = bool(enabled_providers())
 
 MENU_ITEMS = ["⚖️ So sánh model", "🔢 Token & chi phí", "💬 Trợ lý CLI",
@@ -206,7 +235,7 @@ if menu == "⚖️ So sánh model":
         st.info("Provider đang bật: " + ", ".join(f"{p['label']} (`{p['model']}`)" for p in active))
     else:
         st.warning("Chưa có provider nào có key. Sang menu **🔑 API Keys** để dán key "
-                   "Gemini free (đã điền sẵn 2 provider, chỉ cần thêm key).")
+                   "(khuyên dùng Gemini vì miễn phí).")
 
     prompt = st.text_area("Prompt (gửi cho mọi model)",
                           "Việt Nam có bao nhiêu tỉnh thành?", key="cmp_prompt")
@@ -444,61 +473,30 @@ elif menu == "🧪 Test & Chấm điểm":
 # Tab 5 — BYOK: quản lý API key dùng chung cho MỌI tính năng
 # ---------------------------------------------------------------------------
 elif menu == "🔑 API Keys":
-    st.subheader("Quản lý API key (BYOK — Bring Your Own Key)")
-    st.caption("**Bản online không kèm key sẵn** — mỗi người tự dán API key free của mình "
-               "(lý do bảo mật: repo public nên không nhúng key). Đã điền sẵn 2 dòng "
-               "Gemini (model lớn + nhỏ), bạn chỉ cần lấy key free rồi dán vào. Provider "
-               "thứ 3, 4, 5... là tùy chọn. Key chỉ nằm trong phiên trình duyệt của bạn, "
-               "KHÔNG lưu ra file, KHÔNG lên GitHub.")
+    st.subheader("Cài đặt API Key (BYOK)")
+    st.caption("Nhập API Key cá nhân từ bất kỳ nhà cung cấp phổ biến nào dưới đây. "
+               "Mỗi loại chỉ cần dán key — base URL và model đã cấu hình sẵn.")
+    st.success("🛡️ API Key chỉ nằm trong **phiên trình duyệt của bạn**, KHÔNG lưu ở "
+               "server, KHÔNG ghi ra file, KHÔNG lên GitHub.")
 
-    with st.expander("🆓 Lấy API key MIỄN PHÍ ở đâu?", expanded=not enabled_providers()):
-        st.markdown(
-            "- **Gemini (Google AI Studio)** — miễn phí, không cần thẻ: "
-            "[aistudio.google.com/apikey](https://aistudio.google.com/apikey) · "
-            "base `https://generativelanguage.googleapis.com/v1beta/openai/`\n"
-            "- **Groq** — miễn phí, rất nhanh: "
-            "[console.groq.com/keys](https://console.groq.com/keys) · "
-            "base `https://api.groq.com/openai/v1`\n"
-            "- **NVIDIA NIM** — miễn phí (gợi ý của lab): "
-            "[build.nvidia.com](https://build.nvidia.com) · "
-            "base `https://integrate.api.nvidia.com/v1`\n"
-            "- **OpenAI** — trả phí: "
-            "[platform.openai.com/api-keys](https://platform.openai.com/api-keys) · "
-            "base để trống\n\n"
-            "Dán key vào ô của provider tương ứng rồi tick **Bật**."
-        )
-
-    # Bảng cấu hình provider (2 Gemini mặc định + tùy chọn thêm).
-    remove_idx = None
-    for i, p in enumerate(st.session_state.providers):
-        cols = st.columns([0.5, 2, 2.5, 2.5, 0.6])
-        p["on"] = cols[0].checkbox("Bật", value=p["on"], key=f"on_{i}",
-                                   label_visibility="collapsed")
-        p["label"] = cols[1].text_input("Tên", value=p["label"], key=f"lb_{i}",
-                                        label_visibility="collapsed")
-        p["model"] = cols[2].text_input("Model", value=p["model"], key=f"md_{i}",
-                                        placeholder="model", label_visibility="collapsed")
-        p["key"] = cols[3].text_input("API key", value=p["key"], key=f"ky_{i}",
-                                      type="password", placeholder="API key",
-                                      label_visibility="collapsed")
-        if cols[4].button("🗑", key=f"rm_{i}"):
-            remove_idx = i
-        p["base"] = st.text_input(f"Base URL — {p['label']}", value=p["base"],
-                                  key=f"bs_{i}", label_visibility="collapsed",
-                                  placeholder="Base URL (tương thích OpenAI)")
+    # Mỗi nhà cung cấp: nhãn + link "Lấy key" + đúng 1 ô nhập key.
+    for i, c in enumerate(PROVIDER_CATALOG, start=1):
+        head, link = st.columns([4, 1])
+        badge = " · 🆓" if c["free"] else " · 💳"
+        head.markdown(f"**{i}. {c['title']}**{badge}")
+        link.markdown(f"[{c['link_text']} ↗]({c['link']})")
+        val = st.session_state.provider_keys.get(c["name"], "")
+        new = st.text_input(c["title"], value=val, type="password",
+                            key=f"pk_{c['name']}", placeholder=c["placeholder"],
+                            label_visibility="collapsed")
+        st.session_state.provider_keys[c["name"]] = new
+        st.caption(f"model `{c['model']}`")
         st.divider()
-    if remove_idx is not None:
-        st.session_state.providers.pop(remove_idx)
-        st.rerun()
 
-    if st.button("➕ Thêm provider (tùy chọn)"):
-        st.session_state.providers.append(
-            {"label": "Provider mới", "key": "", "base": "", "model": "", "on": True})
-        st.rerun()
-
-    n = len(enabled_providers())
-    if n:
-        st.success(f"✅ {n} provider sẵn sàng — mọi tính năng gọi model dùng các key này.")
+    active = enabled_providers()
+    if active:
+        st.success("✅ Sẵn sàng: " + ", ".join(p["label"] for p in active)
+                   + " — mọi tính năng gọi model dùng các key này.")
     else:
-        st.warning("Chưa provider nào đủ key + model. Dán key Gemini free vào 2 dòng "
-                   "mặc định ở trên để bắt đầu.")
+        st.warning("Chưa có key nào. Dán ít nhất một key (khuyên dùng **Gemini** vì "
+                   "miễn phí) để mở khoá phần So sánh và Trợ lý CLI.")
