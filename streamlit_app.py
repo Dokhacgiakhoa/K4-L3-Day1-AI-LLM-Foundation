@@ -134,31 +134,40 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 # Danh mục nhà cung cấp cố định — mỗi loại chỉ cần 1 ô nhập key; base URL và
 # model đã đặt sẵn (đều là endpoint TƯƠNG THÍCH OpenAI nên dùng chung 1 SDK).
+# Xếp FREE trước, TRẢ PHÍ sau (cập nhật theo free-tier 2026). "note" là gợi ý
+# ngắn hiển thị cạnh tên. Tất cả đều là endpoint tương thích OpenAI.
 PROVIDER_CATALOG = [
-    {"name": "Gemini", "title": "Google Gemini API Key (Miễn phí — Khuyên dùng)",
-     "base": GEMINI_BASE, "model": "gemini-3.5-flash", "free": True,
+    # ----- Nhóm MIỄN PHÍ (không cần thẻ) -----
+    {"name": "Gemini", "note": "khuyên dùng", "free": True,
+     "base": GEMINI_BASE, "model": "gemini-3.5-flash",
      "link": "https://aistudio.google.com/apikey", "link_text": "Lấy key miễn phí",
      "placeholder": "AIza..."},
-    {"name": "OpenAI", "title": "OpenAI API Key (GPT-4o / GPT-4o-mini)",
-     "base": "https://api.openai.com/v1", "model": "gpt-4o-mini", "free": False,
-     "link": "https://platform.openai.com/api-keys", "link_text": "Lấy key OpenAI",
-     "placeholder": "sk-proj-..."},
-    {"name": "Claude", "title": "Anthropic Claude API Key",
-     "base": "https://api.anthropic.com/v1/", "model": "claude-3-5-sonnet-20241022",
-     "free": False, "link": "https://console.anthropic.com/settings/keys",
-     "link_text": "Lấy key Claude", "placeholder": "sk-ant-..."},
-    {"name": "DeepSeek", "title": "DeepSeek API Key (DeepSeek-V3 / R1)",
-     "base": "https://api.deepseek.com", "model": "deepseek-chat", "free": False,
-     "link": "https://platform.deepseek.com/api_keys", "link_text": "Lấy key DeepSeek",
-     "placeholder": "sk-..."},
-    {"name": "Groq", "title": "Groq API Key (Dự phòng tốc độ cao)",
+    {"name": "Groq", "note": "rất nhanh", "free": True,
      "base": "https://api.groq.com/openai/v1", "model": "llama-3.3-70b-versatile",
-     "free": True, "link": "https://console.groq.com/keys", "link_text": "Lấy key Groq",
+     "link": "https://console.groq.com/keys", "link_text": "Lấy key Groq",
      "placeholder": "gsk_..."},
-    {"name": "Cerebras", "title": "Cerebras API Key (Dự phòng tốc độ cao)",
-     "base": "https://api.cerebras.ai/v1", "model": "llama-3.3-70b", "free": True,
+    {"name": "Cerebras", "note": "tốc độ cao", "free": True,
+     "base": "https://api.cerebras.ai/v1", "model": "llama-3.3-70b",
      "link": "https://cloud.cerebras.ai", "link_text": "Lấy key Cerebras",
      "placeholder": "csk-..."},
+    {"name": "OpenRouter", "note": "1 key · nhiều model", "free": True,
+     "base": "https://openrouter.ai/api/v1",
+     "model": "meta-llama/llama-3.3-70b-instruct:free",
+     "link": "https://openrouter.ai/keys", "link_text": "Lấy key OpenRouter",
+     "placeholder": "sk-or-..."},
+    # ----- Nhóm TRẢ PHÍ -----
+    {"name": "OpenAI", "note": "trả phí", "free": False,
+     "base": "https://api.openai.com/v1", "model": "gpt-4o-mini",
+     "link": "https://platform.openai.com/api-keys", "link_text": "Lấy key OpenAI",
+     "placeholder": "sk-proj-..."},
+    {"name": "Claude", "note": "trả phí", "free": False,
+     "base": "https://api.anthropic.com/v1/", "model": "claude-3-5-sonnet-20241022",
+     "link": "https://console.anthropic.com/settings/keys",
+     "link_text": "Lấy key Claude", "placeholder": "sk-ant-..."},
+    {"name": "DeepSeek", "note": "tặng 5M token khi đăng ký", "free": False,
+     "base": "https://api.deepseek.com", "model": "deepseek-chat",
+     "link": "https://platform.deepseek.com/api_keys", "link_text": "Lấy key DeepSeek",
+     "placeholder": "sk-..."},
 ]
 
 
@@ -475,7 +484,8 @@ elif menu == "🧪 Test & Chấm điểm":
 elif menu == "🔑 API Keys":
     st.subheader("Cài đặt API Key (BYOK)")
     st.caption("Nhập API Key cá nhân từ bất kỳ nhà cung cấp phổ biến nào dưới đây. "
-               "Mỗi loại chỉ cần dán key — base URL và model đã cấu hình sẵn.")
+               "Mỗi loại chỉ cần dán key — base URL và model đã cấu hình sẵn. "
+               "🆓 miễn phí xếp trước, 💳 trả phí xếp sau.")
     st.success("🛡️ API Key chỉ nằm trong **phiên trình duyệt của bạn**, KHÔNG lưu ở "
                "server, KHÔNG ghi ra file, KHÔNG lên GitHub.")
 
@@ -484,9 +494,8 @@ elif menu == "🔑 API Keys":
     for i, c in enumerate(PROVIDER_CATALOG):
         with grid[i % 2]:
             badge = "🆓" if c["free"] else "💳"
-            note = " · khuyên dùng" if c["name"] == "Gemini" else ""
             top = st.columns([3, 2])
-            top[0].markdown(f"**{c['name']}** {badge}{note}")
+            top[0].markdown(f"**{c['name']}** {badge} · {c['note']}")
             top[1].markdown(
                 f"<div style='text-align:right'>"
                 f"<a href='{c['link']}' target='_blank'>{c['link_text']} ↗</a></div>",
