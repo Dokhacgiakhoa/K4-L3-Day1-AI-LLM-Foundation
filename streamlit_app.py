@@ -55,12 +55,23 @@ def call_provider(prompt: str, api_key: str, base_url: str, model: str,
         return "", 0.0, str(e)
 
 
+import re  # noqa: E402
+
+
 # Bảng giá tham chiếu để ước tính chi phí: model lạ -> rơi về gpt-4o (như lab).
 def _price_key_for(model: str) -> str:
-    m = model.lower()
-    if "mini" in m or "lite" in m or "8b" in m or "small" in m:
+    # Tách theo "từ" (không phải chuỗi con) để tránh bẫy: "geMINI" chứa "mini"
+    # nhưng KHÔNG phải model mini. Chỉ coi là loại nhỏ khi có token rõ ràng.
+    tokens = re.split(r"[^a-z0-9]+", model.lower())
+    small_markers = {"mini", "lite", "small", "8b", "7b", "9b"}
+    if any(t in small_markers for t in tokens):
         return "gpt-4o-mini"
     return "gpt-4o"
+
+
+def price_is_real(model: str) -> bool:
+    """True nếu lab CÓ bảng giá thật cho model này; False nếu phải giả định."""
+    return model in lab.PRICING_PER_1K_TOKENS
 
 
 # ---------------------------------------------------------------------------
@@ -120,7 +131,12 @@ st.caption("Giao diện thử nhanh các hàm trong template.py. Cần API key t
 
 # --- Trạng thái key ---
 has_key = bool(os.getenv("OPENAI_API_KEY")) and os.getenv("OPENAI_API_KEY") != "sk-your-key-here"
+MENU_ITEMS = ["⚖️ So sánh model", "🔢 Token & chi phí", "💬 Trợ lý CLI", "🧪 Test & Chấm điểm"]
+
 with st.sidebar:
+    st.subheader("📋 Menu")
+    menu = st.radio("Chọn chức năng", MENU_ITEMS, label_visibility="collapsed")
+    st.divider()
     st.subheader("Cấu hình")
     st.write(f"Model lớn: `{lab.OPENAI_MODEL}`")
     st.write(f"Model nhỏ: `{lab.OPENAI_MINI_MODEL}`")
@@ -138,14 +154,11 @@ with st.sidebar:
                f"còn lại (reset sau ~{_reset // 60} phút). Giới hạn theo IP để "
                f"chia sẻ công bằng key free.")
 
-tab_compare, tab_token, tab_chat, tab_test = st.tabs(
-    ["⚖️ So sánh model", "🔢 Token & chi phí", "💬 Trợ lý CLI", "🧪 Test & Chấm điểm"]
-)
 
 # ---------------------------------------------------------------------------
 # Tab 1 — compare_models
 # ---------------------------------------------------------------------------
-with tab_compare:
+if menu == "⚖️ So sánh model":
     st.subheader("So sánh nhiều model / nhiều nhà cung cấp")
     st.caption("Nhập key cho từng provider (OpenAI, Groq, Gemini...) hoặc tự thêm. "
                "Bấm 'Chạy tất cả' để gọi mọi model đang bật rồi so sánh chi phí input/output/tổng. "
@@ -229,19 +242,32 @@ with tab_compare:
                 if err:
                     st.error(f"**{p['label']}** lỗi: {err[:200]}")
                     continue
-                # Ước tính chi phí input/output/tổng theo bảng giá tham chiếu của lab.
-                cost = lab.estimate_cost(prompt, text, model=_price_key_for(p["model"]))
-                rows.append({**p, "text": text, "latency": latency, "cost": cost})
+                # Ước tính chi phí. Nếu model có giá thật trong lab thì dùng luôn;
+                # nếu không thì tính theo giá tham chiếu và ĐÁNH DẤU là giả định.
+                real = price_is_real(p["model"])
+                price_model = p["model"] if real else _price_key_for(p["model"])
+                cost = lab.estimate_cost(prompt, text, model=price_model)
+                rows.append({**p, "text": text, "latency": latency,
+                             "cost": cost, "real": real, "price_model": price_model})
 
             if rows:
-                # Bảng so sánh: mỗi cột là một provider.
+                # Bảng so sánh: mỗi cột là một provider. Cột chi phí ghi rõ THẬT/giả định.
                 st.markdown("#### 💰 So sánh chi phí (input / output / tổng)")
-                table = {"Hạng mục": ["Model", "Latency (s)", "Input tokens", "Output tokens",
-                                      "Chi phí input ($)", "Chi phí output ($)", "TỔNG ($)"]}
+                any_assumed = any(not r["real"] for r in rows)
+                if any_assumed:
+                    st.warning("⚠️ Các model không có trong bảng giá của lab được tính "
+                               "chi phí **GIẢ ĐỊNH** theo giá OpenAI tham chiếu (cột có dấu *), "
+                               "**không phải giá thật** của nhà cung cấp. Token là số thật.")
+                table = {"Hạng mục": ["Model", "Giá theo", "Latency (s)", "Input tokens",
+                                      "Output tokens", "Chi phí input ($)", "Chi phí output ($)",
+                                      "TỔNG ($)"]}
                 for r in rows:
                     c = r["cost"]
-                    table[r["label"]] = [
-                        r["model"], f"{r['latency']:.2f}", c["input_tokens"], c["output_tokens"],
+                    star = "" if r["real"] else " *"
+                    price_note = r["price_model"] if r["real"] else f"{r['price_model']} (giả định)"
+                    table[r["label"] + star] = [
+                        r["model"], price_note, f"{r['latency']:.2f}",
+                        c["input_tokens"], c["output_tokens"],
                         f"{c['input_cost']:.6f}", f"{c['output_cost']:.6f}", f"{c['total_cost']:.6f}",
                     ]
                 st.table(table)
@@ -262,25 +288,43 @@ with tab_compare:
 # ---------------------------------------------------------------------------
 # Tab 2 — count_tokens + estimate_cost (chạy được không cần key)
 # ---------------------------------------------------------------------------
-with tab_token:
+elif menu == "🔢 Token & chi phí":
     st.subheader("Đếm token & ước tính chi phí (Part 2)")
     st.caption("Chạy offline được — dùng tiktoken, không gọi API.")
     text_in = st.text_area("Văn bản input (prompt)", "Giải thích token là gì.", key="tok_in")
     text_out = st.text_area("Văn bản output (response)",
                             "Token là đơn vị văn bản mà model xử lý.", key="tok_out")
-    model = st.selectbox("Model tính giá", list(lab.PRICING_PER_1K_TOKENS.keys()))
+    # Cho chọn cả model thật đang cấu hình (Gemini...) lẫn các mức giá của lab.
+    model_options = list(dict.fromkeys(
+        [lab.OPENAI_MODEL, lab.OPENAI_MINI_MODEL, *lab.PRICING_PER_1K_TOKENS.keys()]
+    ))
+    model = st.selectbox("Model (để đếm token & chọn mức giá)", model_options)
+    real = price_is_real(model)
+    price_ref = model if real else _price_key_for(model)
+    if real:
+        st.caption(f"✅ Chi phí THẬT: lab có bảng giá cho `{model}` "
+                   f"(`PRICING_PER_1K_TOKENS`).")
+    else:
+        st.caption(f"⚠️ Chi phí **GIẢ ĐỊNH**: lab KHÔNG có giá cho `{model}`. "
+                   f"Con số dưới đây tính theo mức tham chiếu `{price_ref}` của OpenAI, "
+                   f"**không phải giá thật** của nhà cung cấp. Muốn số đúng, tra bảng giá "
+                   f"chính thức của họ.")
     if st.button("Tính token & chi phí"):
         cost = lab.estimate_cost(text_in, text_out, model=model)
+        tag = "" if real else " (giả định)"
         c1, c2, c3 = st.columns(3)
         c1.metric("Input tokens", cost["input_tokens"])
         c2.metric("Output tokens", cost["output_tokens"])
-        c3.metric("Tổng chi phí", f"${cost['total_cost']:.8f}")
+        c3.metric(f"Tổng chi phí{tag}", f"${cost['total_cost']:.8f}")
         st.json(cost)
+        if not real:
+            st.info("Số token là thật (đếm bằng tiktoken/fallback); chỉ phần chi phí "
+                    "là giả định theo giá tham chiếu.")
 
 # ---------------------------------------------------------------------------
 # Tab 3 — Trợ lý chat nhiều lượt (streaming + history + thống kê)
 # ---------------------------------------------------------------------------
-with tab_chat:
+elif menu == "💬 Trợ lý CLI":
     st.subheader("Trợ lý hội thoại (Part 3 + 4)")
     persona = st.text_input(
         "Persona (system prompt)",
@@ -359,7 +403,7 @@ with tab_chat:
 # ---------------------------------------------------------------------------
 # Tab 4 — Chạy test & chấm điểm ngay trong giao diện (dùng mock, không cần key)
 # ---------------------------------------------------------------------------
-with tab_test:
+elif menu == "🧪 Test & Chấm điểm":
     st.subheader("Chạy test & chấm điểm")
     st.caption("Chạy pytest/grade.py bằng mock — không tốn API, không cần key. "
                "Bấm nút để xem chương trình chạy và kết quả pass/fail ngay tại đây.")
