@@ -127,7 +127,8 @@ def check_rate(consume: bool = True):
 st.set_page_config(page_title="Lab 01 — LLM API Review", page_icon="🤖", layout="wide")
 
 st.title("🤖 Lab 01 — Review LLM API")
-st.caption("Giao diện thử nhanh các hàm trong template.py. Key quản lý ở menu '🔑 API Keys'.")
+st.caption("Giao diện thử nhanh các hàm trong template.py. Tự thêm API key (Gemini free) "
+           "ở menu '🔑 API Keys' để dùng phần gọi model.")
 
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
@@ -167,7 +168,12 @@ MENU_ITEMS = ["⚖️ So sánh model", "🔢 Token & chi phí", "💬 Trợ lý 
 
 with st.sidebar:
     st.subheader("📋 Menu")
-    menu = st.radio("Chọn chức năng", MENU_ITEMS, label_visibility="collapsed")
+    # Ưu tiên BYOK: lần đầu vào mà CHƯA có key -> mở thẳng menu '🔑 API Keys'
+    # để người dùng thêm key trước. Có key rồi -> mặc định vào 'So sánh model'.
+    if "menu_choice" not in st.session_state:
+        st.session_state.menu_choice = "🔑 API Keys" if not has_key else MENU_ITEMS[0]
+    menu = st.radio("Chọn chức năng", MENU_ITEMS, key="menu_choice",
+                    label_visibility="collapsed")
     st.divider()
     st.subheader("Cấu hình")
     active = enabled_providers()
@@ -439,10 +445,11 @@ elif menu == "🧪 Test & Chấm điểm":
 # ---------------------------------------------------------------------------
 elif menu == "🔑 API Keys":
     st.subheader("Quản lý API key (BYOK — Bring Your Own Key)")
-    st.caption("Key cấu hình ở đây dùng chung cho tất cả tính năng (So sánh, Trợ lý CLI). "
-               "Mặc định có sẵn 2 provider Gemini (model lớn + nhỏ) — chỉ cần dán key. "
-               "Provider thứ 3, 4, 5... là tùy chọn thêm. Key chỉ nằm trong phiên trình "
-               "duyệt của bạn, KHÔNG lưu ra file, KHÔNG lên GitHub.")
+    st.caption("**Bản online không kèm key sẵn** — mỗi người tự dán API key free của mình "
+               "(lý do bảo mật: repo public nên không nhúng key). Đã điền sẵn 2 dòng "
+               "Gemini (model lớn + nhỏ), bạn chỉ cần lấy key free rồi dán vào. Provider "
+               "thứ 3, 4, 5... là tùy chọn. Key chỉ nằm trong phiên trình duyệt của bạn, "
+               "KHÔNG lưu ra file, KHÔNG lên GitHub.")
 
     with st.expander("🆓 Lấy API key MIỄN PHÍ ở đâu?", expanded=not enabled_providers()):
         st.markdown(
