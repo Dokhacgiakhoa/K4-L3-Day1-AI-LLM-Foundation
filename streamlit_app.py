@@ -62,6 +62,57 @@ def _price_key_for(model: str) -> str:
         return "gpt-4o-mini"
     return "gpt-4o"
 
+
+# ---------------------------------------------------------------------------
+# Giới hạn request theo IP — tránh một người xài hết quota key free dùng chung.
+# ---------------------------------------------------------------------------
+import threading  # noqa: E402
+
+RATE_LIMIT = 30       # số request gọi model tối đa mỗi IP...
+RATE_WINDOW = 3600    # ...trong mỗi cửa sổ (giây) = 1 giờ.
+
+
+@st.cache_resource
+def _rate_store():
+    """Kho đếm CHUNG cho mọi phiên/người dùng (singleton toàn server)."""
+    return {"data": {}, "lock": threading.Lock()}
+
+
+def get_client_ip() -> str:
+    """Lấy IP người truy cập từ header (Streamlit Cloud đứng sau proxy)."""
+    try:
+        h = st.context.headers
+        xff = h.get("X-Forwarded-For") or h.get("x-forwarded-for")
+        if xff:
+            return xff.split(",")[0].strip()   # IP đầu tiên là client thật
+        return h.get("X-Real-Ip") or h.get("x-real-ip") or "local"
+    except Exception:
+        return "local"
+
+
+def check_rate(consume: bool = True):
+    """Kiểm tra (và trừ) hạn mức của IP hiện tại.
+
+    Trả về (allowed: bool, remaining: int, reset_in: int giây).
+    consume=False chỉ xem còn bao nhiêu, không trừ.
+    """
+    ip = get_client_ip()
+    store = _rate_store()
+    now = time.time()
+    with store["lock"]:
+        window_start, count = store["data"].get(ip, (now, 0))
+        # Hết cửa sổ -> reset bộ đếm.
+        if now - window_start >= RATE_WINDOW:
+            window_start, count = now, 0
+        remaining = RATE_LIMIT - count
+        reset_in = int(RATE_WINDOW - (now - window_start))
+        if remaining <= 0:
+            return False, 0, reset_in
+        if consume:
+            store["data"][ip] = (window_start, count + 1)
+            remaining -= 1
+        return True, remaining, reset_in
+
 st.set_page_config(page_title="Lab 01 — LLM API Review", page_icon="🤖", layout="wide")
 
 st.title("🤖 Lab 01 — Review LLM API")
@@ -79,6 +130,13 @@ with st.sidebar:
     else:
         st.warning("Chưa có API key trong .env. Phần đếm token vẫn chạy; "
                    "phần gọi model (so sánh / chat) sẽ báo lỗi khi bấm.")
+
+    # Hạn mức request theo IP (không trừ, chỉ xem).
+    _ok, _remaining, _reset = check_rate(consume=False)
+    st.divider()
+    st.caption(f"Hạn mức gọi model: **{_remaining}/{RATE_LIMIT}** request "
+               f"còn lại (reset sau ~{_reset // 60} phút). Giới hạn theo IP để "
+               f"chia sẻ công bằng key free.")
 
 tab_compare, tab_token, tab_chat, tab_test = st.tabs(
     ["⚖️ So sánh model", "🔢 Token & chi phí", "💬 Trợ lý CLI", "🧪 Test & Chấm điểm"]
@@ -160,7 +218,13 @@ with tab_compare:
         else:
             rows = []
             for p in active:
-                with st.spinner(f"Đang gọi {p['label']} ({p['model']})..."):
+                # Trừ hạn mức theo IP trước mỗi lời gọi model thật.
+                allowed, remaining, reset_in = check_rate()
+                if not allowed:
+                    st.error(f"⛔ Hết hạn mức {RATE_LIMIT} request/giờ cho IP này. "
+                             f"Thử lại sau ~{reset_in // 60} phút.")
+                    break
+                with st.spinner(f"Đang gọi {p['label']} ({p['model']}) · còn {remaining} request..."):
                     text, latency, err = call_provider(prompt, p["key"], p["base"], p["model"])
                 if err:
                     st.error(f"**{p['label']}** lỗi: {err[:200]}")
@@ -246,6 +310,12 @@ with tab_chat:
 
     user_msg = st.chat_input("Nhập câu hỏi..." if has_key else "Cần API key trong .env")
     if user_msg and has_key:
+        # Trừ hạn mức theo IP trước khi gọi model thật.
+        allowed, remaining, reset_in = check_rate()
+        if not allowed:
+            st.error(f"⛔ Hết hạn mức {RATE_LIMIT} request/giờ cho IP này. "
+                     f"Thử lại sau ~{reset_in // 60} phút.")
+            st.stop()
         st.session_state.messages.append({"role": "user", "content": user_msg})
         with st.chat_message("user"):
             st.write(user_msg)
