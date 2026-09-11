@@ -386,24 +386,34 @@ pip install -r requirements.txt      # đã có streamlit
 streamlit run streamlit_app.py
 ```
 
-Mở `http://localhost:8501`. Muốn gọi model thật thì tạo `.env` (xem
-[LAB_GUIDE.md](LAB_GUIDE.md), Phụ lục B) hoặc nhập key ngay trong giao diện.
+Mở `http://localhost:8501`. Điều hướng bằng **menu ở sidebar** (5 mục). Muốn
+gọi model thật thì vào menu **🔑 API Keys** dán key (Gemini free) — hoặc tạo
+`.env` để tự điền sẵn (xem [LAB_GUIDE.md](LAB_GUIDE.md), Phụ lục B).
 
-### Tính năng
+### Tính năng (menu sidebar)
 
-| Tab | Chức năng |
+| Menu | Chức năng |
 |---|---|
-| ⚖️ So sánh model | Nhập key nhiều provider (OpenAI, Groq, Gemini, hoặc tự thêm), chạy tất cả model cùng lúc, so sánh chi phí input/output/tổng. |
+| ⚖️ So sánh model | Gọi tất cả provider đang bật cùng một prompt, so sánh chi phí input/output/tổng (ghi rõ chi phí **thật** vs **giả định**). |
 | 🔢 Token & chi phí | Đếm token bằng `tiktoken` và ước tính chi phí — chạy offline, không cần key. |
-| 💬 Trợ lý CLI | Chat nhiều lượt có streaming, history và thống kê token/chi phí realtime. |
+| 💬 Trợ lý CLI | Chat nhiều lượt có streaming, history và thống kê token/chi phí realtime; chọn provider trả lời. |
 | 🧪 Test & Chấm điểm | Chạy `pytest`/`grade.py` ngay trong giao diện, xem pass/fail trực tiếp. |
+| 🔑 API Keys (BYOK) | Dán key cho từng nhà cung cấp — mỗi loại 1 ô key + link lấy key, base URL và model cấu hình sẵn. |
 
-### Lấy API key miễn phí
+### API key & bảo mật
 
-- Gemini: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-- Groq: [console.groq.com/keys](https://console.groq.com/keys)
-- NVIDIA NIM: [build.nvidia.com](https://build.nvidia.com)
+BYOK (Bring Your Own Key): mỗi người tự dán API key của mình. Danh sách nhà
+cung cấp, **miễn phí xếp trước**:
 
-> ⚠️ Key chỉ để trong `.env` (đã bị `.gitignore` chặn) hoặc nhập trong phiên
-> trình duyệt. Không commit key lên GitHub. Khi deploy Streamlit Cloud, nhập
-> key vào ô **Secrets**, không dùng `.env`.
+- 🆓 **Gemini** (khuyên dùng) · [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- 🆓 **Groq** · [console.groq.com/keys](https://console.groq.com/keys)
+- 🆓 **Cerebras** · [cloud.cerebras.ai](https://cloud.cerebras.ai)
+- 🆓 **OpenRouter** (1 key, nhiều model) · [openrouter.ai/keys](https://openrouter.ai/keys)
+- 💳 OpenAI · Claude · DeepSeek (DeepSeek tặng 5M token khi đăng ký)
+
+Giới hạn **30 request/giờ theo IP** cho các lời gọi model thật, để chia sẻ
+công bằng key free.
+
+> ⚠️ Key chỉ nằm trong phiên trình duyệt (hoặc `.env` đã bị `.gitignore` chặn).
+> **Không commit key lên GitHub.** Khi deploy Streamlit Cloud, nhập key vào ô
+> **Secrets** (không dùng `.env`), vì `.env` không được đẩy lên repo public.
