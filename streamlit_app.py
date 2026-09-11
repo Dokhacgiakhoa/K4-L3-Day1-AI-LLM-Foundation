@@ -479,19 +479,25 @@ elif menu == "🔑 API Keys":
     st.success("🛡️ API Key chỉ nằm trong **phiên trình duyệt của bạn**, KHÔNG lưu ở "
                "server, KHÔNG ghi ra file, KHÔNG lên GitHub.")
 
-    # Mỗi nhà cung cấp: nhãn + link "Lấy key" + đúng 1 ô nhập key.
-    for i, c in enumerate(PROVIDER_CATALOG, start=1):
-        head, link = st.columns([4, 1])
-        badge = " · 🆓" if c["free"] else " · 💳"
-        head.markdown(f"**{i}. {c['title']}**{badge}")
-        link.markdown(f"[{c['link_text']} ↗]({c['link']})")
-        val = st.session_state.provider_keys.get(c["name"], "")
-        new = st.text_input(c["title"], value=val, type="password",
-                            key=f"pk_{c['name']}", placeholder=c["placeholder"],
-                            label_visibility="collapsed")
-        st.session_state.provider_keys[c["name"]] = new
-        st.caption(f"model `{c['model']}`")
-        st.divider()
+    # Lưới 2 cột cho gọn: mỗi ô = 1 nhà cung cấp (nhãn + link + 1 ô key).
+    grid = st.columns(2)
+    for i, c in enumerate(PROVIDER_CATALOG):
+        with grid[i % 2]:
+            badge = "🆓" if c["free"] else "💳"
+            note = " · khuyên dùng" if c["name"] == "Gemini" else ""
+            top = st.columns([3, 2])
+            top[0].markdown(f"**{c['name']}** {badge}{note}")
+            top[1].markdown(
+                f"<div style='text-align:right'>"
+                f"<a href='{c['link']}' target='_blank'>{c['link_text']} ↗</a></div>",
+                unsafe_allow_html=True,
+            )
+            val = st.session_state.provider_keys.get(c["name"], "")
+            new = st.text_input(c["name"], value=val, type="password",
+                                key=f"pk_{c['name']}",
+                                placeholder=f"{c['placeholder']}   →   {c['model']}",
+                                label_visibility="collapsed")
+            st.session_state.provider_keys[c["name"]] = new
 
     active = enabled_providers()
     if active:
