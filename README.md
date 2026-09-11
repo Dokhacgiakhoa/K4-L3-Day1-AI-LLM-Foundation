@@ -369,3 +369,41 @@ Lab không chỉ yêu cầu code chạy được. Sau khi hoàn thành, bạn n�
 - Cách các thành phần kết hợp thành một vòng lặp chatbot hoàn chỉnh.
 
 Toàn bộ hướng dẫn thực hành bắt đầu tại [LAB_GUIDE.md](LAB_GUIDE.md).
+
+---
+
+## Giao Diện Review (Streamlit) — Bổ Sung
+
+Ngoài phần lab bắt buộc, repo có thêm `streamlit_app.py`: một giao diện web
+để thử trực tiếp các hàm đã viết trong `template.py` ngay trên trình duyệt.
+Đây **không phải file nộp bài** — bộ chấm chỉ đọc `template.py`/`solution/`,
+nên file này không ảnh hưởng điểm.
+
+### Chạy
+
+```bash
+pip install -r requirements.txt      # đã có streamlit
+streamlit run streamlit_app.py
+```
+
+Mở `http://localhost:8501`. Muốn gọi model thật thì tạo `.env` (xem
+[LAB_GUIDE.md](LAB_GUIDE.md), Phụ lục B) hoặc nhập key ngay trong giao diện.
+
+### Tính năng
+
+| Tab | Chức năng |
+|---|---|
+| ⚖️ So sánh model | Nhập key nhiều provider (OpenAI, Groq, Gemini, hoặc tự thêm), chạy tất cả model cùng lúc, so sánh chi phí input/output/tổng. |
+| 🔢 Token & chi phí | Đếm token bằng `tiktoken` và ước tính chi phí — chạy offline, không cần key. |
+| 💬 Trợ lý CLI | Chat nhiều lượt có streaming, history và thống kê token/chi phí realtime. |
+| 🧪 Test & Chấm điểm | Chạy `pytest`/`grade.py` ngay trong giao diện, xem pass/fail trực tiếp. |
+
+### Lấy API key miễn phí
+
+- Gemini: [aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+- Groq: [console.groq.com/keys](https://console.groq.com/keys)
+- NVIDIA NIM: [build.nvidia.com](https://build.nvidia.com)
+
+> ⚠️ Key chỉ để trong `.env` (đã bị `.gitignore` chặn) hoặc nhập trong phiên
+> trình duyệt. Không commit key lên GitHub. Khi deploy Streamlit Cloud, nhập
+> key vào ô **Secrets**, không dùng `.env`.
